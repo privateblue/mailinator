@@ -2,6 +2,7 @@ package mailinator.db.read
 
 import mailinator.data.read.{MessageIndexViewRecord, Page}
 import mailinator.data.shared.MessageId
+import mailinator.config.Settings
 
 import store.StoreActor
 
@@ -41,7 +42,7 @@ trait MessageIndexView[F[_]] {
   def close(): F[Unit]
 }
 
-class StoreActorMessageIndexView[F[_]: Async] extends MessageIndexView[F] {
+class StoreActorMessageIndexView[F[_]: Async](settings: Settings) extends MessageIndexView[F] {
   private val store = new StoreActor {
     override type Value = MessageIndexViewRecord
     override type PK = String
@@ -55,7 +56,7 @@ class StoreActorMessageIndexView[F[_]: Async] extends MessageIndexView[F] {
     override implicit val filterKeyOrdering = Ordering.String
   }
 
-  private implicit val system = ActorSystem(store(), "MessageIndexView")
+  private implicit val system = ActorSystem(store(settings.messageStoreCapacity), "MessageIndexView")
   private implicit val ec = system.executionContext
   private implicit val timeout: Timeout = 3.seconds
 
@@ -160,9 +161,9 @@ class StoreActorMessageIndexView[F[_]: Async] extends MessageIndexView[F] {
 }
 
 object StoreActorMessageIndexView {
-  def make[F[_]: Async]: Resource[F, MessageIndexView[F]] =
+  def make[F[_]: Async](settings: Settings): Resource[F, MessageIndexView[F]] =
     Resource.make {
-      Async[F].delay(new StoreActorMessageIndexView)
+      Async[F].delay(new StoreActorMessageIndexView(settings))
     } { view =>
       view.close()
     }

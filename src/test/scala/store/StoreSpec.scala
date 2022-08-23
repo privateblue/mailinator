@@ -93,7 +93,7 @@ class StoreSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike {
   // b, 2, recipient2
 
   "RetrieveRange" should "first address, own cursor, limit after end of own records" in {
-    val store = spawn(index(), UUID.randomUUID().toString)
+    val store = spawn(index(10), UUID.randomUUID().toString)
     val result = for {
       _ <- insertRecords(store)
       cursor = Option((recordC.receivedAt, recordC.messageId))
@@ -103,7 +103,7 @@ class StoreSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike {
   }
 
   "RetrieveRange" should "second address, but other recipient's cursor" in {
-    val store = spawn(index(), UUID.randomUUID().toString)
+    val store = spawn(index(10), UUID.randomUUID().toString)
     val result = for {
       _ <- insertRecords(store)
       cursor = Option((recordC.receivedAt, recordC.messageId))
@@ -113,7 +113,7 @@ class StoreSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike {
   }
 
   "RetrieveRange" should "second address, own cursor, limit at end of own records" in {
-    val store = spawn(index(), UUID.randomUUID().toString)
+    val store = spawn(index(10), UUID.randomUUID().toString)
     val result = for {
       _ <- insertRecords(store)
       cursor = Option((recordD.receivedAt, recordD.messageId))
@@ -123,7 +123,7 @@ class StoreSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike {
   }
 
   "RetrieveRange" should "first address, but other recipient's cursor" in {
-    val store = spawn(index(), UUID.randomUUID().toString)
+    val store = spawn(index(10), UUID.randomUUID().toString)
     val result = for {
       _ <- insertRecords(store)
       cursor = Option((recordD.receivedAt, recordD.messageId))
@@ -133,7 +133,7 @@ class StoreSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike {
   }
 
   "RetrieveRange" should "first address, no cursor, limit before the end of own records" in {
-    val store = spawn(index(), UUID.randomUUID().toString)
+    val store = spawn(index(10), UUID.randomUUID().toString)
     val result = for {
       _ <- insertRecords(store)
       cursor = Option.empty
@@ -143,7 +143,7 @@ class StoreSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike {
   }
 
   "RetrieveRange" should "first address, no cursor, limit after the end of own records" in {
-    val store = spawn(index(), UUID.randomUUID().toString)
+    val store = spawn(index(10), UUID.randomUUID().toString)
     val result = for {
       _ <- insertRecords(store)
       cursor = Option.empty
@@ -153,7 +153,7 @@ class StoreSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike {
   }
 
   "RetrieveRange" should "second address, no cursor, limit before the end of own records" in {
-    val store = spawn(index(), UUID.randomUUID().toString)
+    val store = spawn(index(10), UUID.randomUUID().toString)
     val result = for {
       _ <- insertRecords(store)
       cursor = Option.empty
@@ -163,12 +163,24 @@ class StoreSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike {
   }
 
   "RetrieveRange" should "second address, no cursor, no limit" in {
-    val store = spawn(index(), UUID.randomUUID().toString)
+    val store = spawn(index(10), UUID.randomUUID().toString)
     val result = for {
       _ <- insertRecords(store)
       cursor = Option.empty
       range <- store.ask(ref => index.RetrieveRange(ref, "recipient2", cursor, Option.empty))
     } yield range
     result.futureValue should contain theSameElementsInOrderAs Seq(recordD, recordF, recordB)
+  }
+
+  "The eviction mechanism" should "drop the oldest message on append if over capacity" in {
+    val store = spawn(index(5), UUID.randomUUID().toString)
+    val result = for {
+      _ <- insertRecords(store)
+      cursor = Option.empty
+      range1 <- store.ask(ref => index.RetrieveRange(ref, "recipient1", cursor, Option.empty))
+      range2 <- store.ask(ref => index.RetrieveRange(ref, "recipient2", cursor, Option.empty))
+    } yield (range1, range2)
+    result.futureValue._1 should contain theSameElementsInOrderAs Seq(recordE, recordC)
+    result.futureValue._2 should contain theSameElementsInOrderAs Seq(recordD, recordF, recordB)
   }
 }

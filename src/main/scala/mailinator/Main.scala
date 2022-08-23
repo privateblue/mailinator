@@ -12,9 +12,16 @@ import cats.effect._
 import com.comcast.ip4s._
 
 object Main extends IOApp {
+  val settings = Settings(
+    host = ipv4"0.0.0.0",
+    port = port"8080",
+    maxPageSize = 5,
+    messageStoreCapacity = 1_000_000
+  )
+
   def run(args: List[String]): IO[ExitCode] = {
-    val messageViewResource = StoreActorMessageView.make[IO]
-    val messageIndexViewResource = StoreActorMessageIndexView.make[IO]
+    val messageViewResource = StoreActorMessageView.make[IO](settings)
+    val messageIndexViewResource = StoreActorMessageIndexView.make[IO](settings)
     (messageViewResource, messageIndexViewResource).parTupled
       .use { case (messageView, messageIndexView) =>
         runMailinator(messageView, messageIndexView)
@@ -26,11 +33,6 @@ object Main extends IOApp {
       messageView: MessageView[IO],
       messageIndexView: MessageIndexView[IO]
   ): IO[Unit] = {
-    val settings = Settings(
-      host = ipv4"0.0.0.0",
-      port = port"8080",
-      maxPageSize = 5
-    )
     val writeService = new DefaultWriteService[IO](messageView, messageIndexView)
     val readHttp = new ReadHttp(messageView, messageIndexView, settings)
     val writeHttp = new WriteHttp(writeService)

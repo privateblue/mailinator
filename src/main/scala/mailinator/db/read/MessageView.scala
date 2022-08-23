@@ -2,6 +2,7 @@ package mailinator.db.read
 
 import mailinator.data.shared.MessageId
 import mailinator.data.read.MessageViewRecord
+import mailinator.config.Settings
 
 import store.StoreActor
 import cats.syntax.all._
@@ -37,7 +38,7 @@ trait MessageView[F[_]] {
   def close(): F[Unit]
 }
 
-class StoreActorMessageView[F[_]: Async] extends MessageView[F] {
+class StoreActorMessageView[F[_]: Async](settings: Settings) extends MessageView[F] {
   private val store = new StoreActor {
     override type Value = MessageViewRecord
     override type PK = String
@@ -51,7 +52,7 @@ class StoreActorMessageView[F[_]: Async] extends MessageView[F] {
     override implicit val filterKeyOrdering = Ordering.String
   }
 
-  private implicit val system = ActorSystem(store(), "MessageIndexView")
+  private implicit val system = ActorSystem(store(settings.messageStoreCapacity), "MessageIndexView")
   private implicit val ec = system.executionContext
   private implicit val timeout: Timeout = 3.seconds
 
@@ -155,9 +156,9 @@ class StoreActorMessageView[F[_]: Async] extends MessageView[F] {
 }
 
 object StoreActorMessageView {
-  def make[F[_]: Async]: Resource[F, MessageView[F]] =
+  def make[F[_]: Async](settings: Settings): Resource[F, MessageView[F]] =
     Resource.make {
-      Async[F].delay(new StoreActorMessageView)
+      Async[F].delay(new StoreActorMessageView(settings))
     } { view =>
       view.close()
     }

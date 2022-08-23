@@ -34,12 +34,13 @@ class IntegrationSpec extends AnyFlatSpec {
   val settings = Settings(
     host = ipv4"0.0.0.0",
     port = port"8080",
-    maxPageSize = 3
+    maxPageSize = 3,
+    messageStoreCapacity = 10
   )
 
   def testApi[A](check: Client[IO] => IO[A]): A = {
-    val messageViewResource = StoreActorMessageView.make[IO]
-    val messageIndexViewResource = StoreActorMessageIndexView.make[IO]
+    val messageViewResource = StoreActorMessageView.make[IO](settings)
+    val messageIndexViewResource = StoreActorMessageIndexView.make[IO](settings)
     (messageViewResource, messageIndexViewResource).parTupled
       .use { case (messageView, messageIndexView) =>
         val writeService = new DefaultWriteService[IO](messageView, messageIndexView)

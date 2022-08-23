@@ -3,14 +3,16 @@ package store
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.actor.typed.scaladsl.Behaviors
 
-import scala.collection.immutable.TreeMap
+import scala.collection.immutable.{Queue, TreeMap}
 
 case class Store[PK, V, SK, FK](
     map: Map[PK, V],
     sort: TreeMap[(FK, SK, PK), V],
+    queue: Queue[PK],
     primaryKey: V => PK,
     sortKey: V => SK,
-    filterKey: V => FK
+    filterKey: V => FK,
+    capacity: Int
 ) {
   def composeKey(value: V): (FK, SK, PK) =
     (filterKey(value), sortKey(value), primaryKey(value))
@@ -24,10 +26,12 @@ case class Store[PK, V, SK, FK](
           Store(
             map + (primaryKey(value) -> value),
             sort + (composeKey(value) -> value),
+            queue.enqueue(primaryKey(value)),
             primaryKey,
             sortKey,
-            filterKey
-          )
+            filterKey,
+            capacity
+          ).evicted()
       )
   }
 
@@ -60,12 +64,30 @@ case class Store[PK, V, SK, FK](
           Store(
             map - key,
             sort - composeKey(value),
+            queue.filterNot(_ == key),
             primaryKey,
             sortKey,
-            filterKey
+            filterKey,
+            capacity
           )
       }
       .getOrElse(Seq.empty[V] -> this)
+  }
+
+  def evicted(): Store[PK, V, SK, FK] = {
+    if (map.size > capacity) {
+      val (removedId, newQueue) = queue.dequeue
+      val removed = map.get(removedId)
+      Store(
+        map - removedId,
+        removed.map(composeKey).map(sort - _).getOrElse(sort),
+        newQueue,
+        primaryKey,
+        sortKey,
+        filterKey,
+        capacity
+      )
+    } else this
   }
 }
 
@@ -90,17 +112,19 @@ trait StoreActor {
       extends Protocol
   case class Remove(replyTo: ActorRef[Seq[Value]], key: PK) extends Protocol
 
-  def empty(): Store[PK, Value, SK, FK] =
+  def empty(capacity: Int): Store[PK, Value, SK, FK] =
     Store(
       Map.empty[PK, Value],
       TreeMap.empty[(FK, SK, PK), Value],
+      Queue.empty[PK],
       primaryKey,
       sortKey,
-      filterKey
+      filterKey,
+      capacity
     )
 
-  def apply(): Behavior[Protocol] =
-    crd(empty())
+  def apply(capacity: Int): Behavior[Protocol] =
+    crd(empty(capacity))
 
   def crd(store: Store[PK, Value, SK, FK]): Behavior[Protocol] =
     Behaviors.receiveMessage {
