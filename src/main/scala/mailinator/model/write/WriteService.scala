@@ -13,7 +13,7 @@ trait WriteService[F[_]] {
   def deleteMessage(command: DeleteMessageCommand): F[MessageDeletedEvent]
 }
 
-class WriteServiceMock[F[_]: Async](messageView: MessageView[F], messageIndexView: MessageIndexView[F])
+class DefaultWriteService[F[_]: Async](messageView: MessageView[F], messageIndexView: MessageIndexView[F])
     extends WriteService[F] {
   // This is a no-op in this implementation.
   override def createMailbox(command: CreateMailboxCommand): F[Unit] =

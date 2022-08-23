@@ -16,6 +16,8 @@ import org.http4s._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.circe._
 
+import java.util.MissingResourceException
+
 class ReadHttp[F[_]: Async](messageView: MessageView[F], messageIndexView: MessageIndexView[F], settings: Settings)
     extends Http4sDsl[F] {
   val routes = messageIndexRoute <+> messageRoute
@@ -60,6 +62,7 @@ class ReadHttp[F[_]: Async](messageView: MessageView[F], messageIndexView: Messa
     t match {
       // TODO add more failure modes and corresponding http statuses
       case e: IllegalArgumentException => BadRequest(e.getMessage)
+      case e: MissingResourceException => NotFound(e.getMessage)
       case _                           => InternalServerError()
     }
 }

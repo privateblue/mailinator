@@ -1,7 +1,7 @@
 package mailinator
 
 import mailinator.db.read._
-import mailinator.model.write.WriteServiceMock
+import mailinator.model.write.DefaultWriteService
 import mailinator.http.read.ReadHttp
 import mailinator.http.write.WriteHttp
 import mailinator.config.Settings
@@ -31,7 +31,7 @@ object Main extends IOApp {
       port = port"8080",
       maxPageSize = 5
     )
-    val writeService = new WriteServiceMock[IO](messageView, messageIndexView)
+    val writeService = new DefaultWriteService[IO](messageView, messageIndexView)
     val readHttp = new ReadHttp(messageView, messageIndexView, settings)
     val writeHttp = new WriteHttp(writeService)
     for {

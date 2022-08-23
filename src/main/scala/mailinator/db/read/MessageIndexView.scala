@@ -13,6 +13,8 @@ import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.AskPattern._
 import akka.util.Timeout
 
+import java.util.MissingResourceException
+
 import scala.concurrent.duration._
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
@@ -103,7 +105,7 @@ class StoreActorMessageIndexView[F[_]: Async] extends MessageIndexView[F] {
             .map(_.flatten)
             .transformWith {
               case Success(rs) if rs.isEmpty =>
-                Future.failed(new IllegalArgumentException(s"Mailbox $address cannot be found"))
+                Future.failed(new MissingResourceException(s"Mailbox $address cannot be found", "Mailbox", address))
               case Success(rs) =>
                 Future.successful(rs)
               case Failure(e) =>
@@ -118,7 +120,13 @@ class StoreActorMessageIndexView[F[_]: Async] extends MessageIndexView[F] {
       Async[F].delay(
         system.ask(ref => store.Remove(ref, messageId.show)).transformWith {
           case Success(records) if records.isEmpty =>
-            Future.failed(new IllegalArgumentException(s"Message with id ${messageId.show} cannot be found"))
+            Future.failed(
+              new MissingResourceException(
+                s"Message with id ${messageId.show} cannot be found",
+                "Message",
+                messageId.show
+              )
+            )
           case Success(records) =>
             Future.successful(records.head)
           case Failure(e) =>
@@ -134,13 +142,19 @@ class StoreActorMessageIndexView[F[_]: Async] extends MessageIndexView[F] {
   ): F[Page[MessageIndexViewRecord, (Long, String)]] =
     Async[F].fromFuture(
       Async[F].delay(
-        system.ask(ref => store.RetrieveRange(ref, address, from.map(f => (f._1, f._2.show)), Option(limit + 1))).map {
-          records =>
-            if (records.size >= limit + 1) {
+        system
+          .ask(ref => store.RetrieveRange(ref, address, from.map(f => (f._1, f._2.show)), Option(limit + 1)))
+          .transformWith {
+            case Success(records) if records.isEmpty =>
+              Future.failed(new MissingResourceException(s"Messages of $address cannot be found", "Message", ""))
+            case Success(records) if records.size >= limit + 1 =>
               val next = records.last
-              Page(records.init, Option((next.receivedAt, next.messageId)))
-            } else Page(records, Option.empty)
-        }
+              Future.successful(Page(records.init, Option((next.receivedAt, next.messageId))))
+            case Success(records) =>
+              Future.successful(Page(records, Option.empty))
+            case Failure(e) =>
+              Future.failed(e)
+          }
       )
     )
 }

@@ -1,6 +1,7 @@
 package mailinator.http.write
 
 import mailinator.data.shared.{MessageId, RequestId}
+import mailinator.data.shared.validation.validateEmailAddress
 import mailinator.data.write._
 import mailinator.model.write.WriteService
 
@@ -14,6 +15,8 @@ import org.http4s._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.circe._
 
+import java.util.MissingResourceException
+
 class WriteHttp[F[_]: Async](writeService: WriteService[F]) extends Http4sDsl[F] {
   val routes =
     createMailboxRoute <+> createMessageRoute <+> deleteMailboxRoute <+> deleteMessageRoute
@@ -25,7 +28,8 @@ class WriteHttp[F[_]: Async](writeService: WriteService[F]) extends Http4sDsl[F]
   def createMailboxRoute =
     HttpRoutes.of[F] { case req @ POST -> Root / "mailboxes" =>
       val result = for {
-        request <- req.as[CreateMailboxRequest]
+        parsedReq <- req.as[CreateMailboxRequest]
+        request <- parsedReq.validated
         now <- Async[F].realTimeInstant
         requestId <- RequestId.generated[F]
         command <- CreateMailboxCommand.from(request, now.toEpochMilli, requestId)
@@ -39,7 +43,9 @@ class WriteHttp[F[_]: Async](writeService: WriteService[F]) extends Http4sDsl[F]
   def createMessageRoute =
     HttpRoutes.of[F] { case req @ POST -> Root / "mailboxes" / address / "messages" =>
       val result = for {
-        request <- req.as[CreateMessageRequest]
+        _ <- Async[F].fromValidated(validateEmailAddress(address))
+        parsedReq <- req.as[CreateMessageRequest]
+        request <- parsedReq.validated
         messageId <- MessageId.generated[F]
         now <- Async[F].realTimeInstant
         requestId <- RequestId.generated[F]
@@ -55,6 +61,7 @@ class WriteHttp[F[_]: Async](writeService: WriteService[F]) extends Http4sDsl[F]
   def deleteMailboxRoute =
     HttpRoutes.of[F] { case DELETE -> Root / "mailboxes" / address =>
       val result = for {
+        _ <- Async[F].fromValidated(validateEmailAddress(address))
         now <- Async[F].realTimeInstant
         requestId <- RequestId.generated[F]
         command <- DeleteMailboxCommand.from(address, now.toEpochMilli, requestId)
@@ -69,6 +76,7 @@ class WriteHttp[F[_]: Async](writeService: WriteService[F]) extends Http4sDsl[F]
   def deleteMessageRoute =
     HttpRoutes.of[F] { case DELETE -> Root / "mailboxes" / address / "messages" / id =>
       val result = for {
+        _ <- Async[F].fromValidated(validateEmailAddress(address))
         messageId <- MessageId.from(id)
         now <- Async[F].realTimeInstant
         requestId <- RequestId.generated[F]
@@ -84,6 +92,7 @@ class WriteHttp[F[_]: Async](writeService: WriteService[F]) extends Http4sDsl[F]
     t match {
       // TODO add more failure modes and corresponding http statuses
       case e: IllegalArgumentException => BadRequest(e.getMessage)
+      case e: MissingResourceException => NotFound(e.getMessage)
       case _                           => InternalServerError()
     }
 }

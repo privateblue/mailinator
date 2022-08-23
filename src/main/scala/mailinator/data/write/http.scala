@@ -1,18 +1,26 @@
 package mailinator.data.write
 
 import mailinator.data.shared.MessageId
+import mailinator.data.shared.validation.validateEmailAddress
 
 import cats._
+import cats.syntax.all._
 
 case class CreateMailboxRequest(
     address: String
-)
+) {
+  def validated[F[_]](implicit me: MonadError[F, Throwable]): F[CreateMailboxRequest] =
+    me.fromValidated(validateEmailAddress(address)).map(_ => this)
+}
 
 case class CreateMessageRequest(
     sender: String,
     subject: String,
     body: String
-)
+) {
+  def validated[F[_]](implicit me: MonadError[F, Throwable]): F[CreateMessageRequest] =
+    me.fromValidated(validateEmailAddress(sender)).map(_ => this)
+}
 
 case class CreateMessageResponse(
     id: MessageId,

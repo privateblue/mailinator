@@ -1,9 +1,9 @@
 package mailinator.db.read
 
 import mailinator.data.shared.MessageId
+import mailinator.data.read.MessageViewRecord
 
 import store.StoreActor
-
 import cats.syntax.all._
 import cats.effect.Async
 import cats.effect.kernel.Resource
@@ -11,7 +11,8 @@ import cats.effect.kernel.Resource
 import akka.actor.typed.scaladsl.AskPattern._
 import akka.actor.typed.ActorSystem
 import akka.util.Timeout
-import mailinator.data.read.MessageViewRecord
+
+import java.util.MissingResourceException
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -102,7 +103,7 @@ class StoreActorMessageView[F[_]: Async] extends MessageView[F] {
             .map(_.flatten)
             .transformWith {
               case Success(rs) if rs.isEmpty =>
-                Future.failed(new IllegalArgumentException(s"Mailbox $address cannot be found"))
+                Future.failed(new MissingResourceException(s"Mailbox $address cannot be found", "Mailbox", address))
               case Success(rs) =>
                 Future.successful(rs)
               case Failure(e) =>
@@ -117,7 +118,13 @@ class StoreActorMessageView[F[_]: Async] extends MessageView[F] {
       Async[F].delay(
         system.ask(ref => store.Remove(ref, messageId.show)).transformWith {
           case Success(records) if records.isEmpty =>
-            Future.failed(new IllegalArgumentException(s"Message with id ${messageId.show} cannot be found"))
+            Future.failed(
+              new MissingResourceException(
+                s"Message with id ${messageId.show} cannot be found",
+                "Message",
+                messageId.show
+              )
+            )
           case Success(records) =>
             Future.successful(records.head)
           case Failure(e) =>
@@ -131,7 +138,13 @@ class StoreActorMessageView[F[_]: Async] extends MessageView[F] {
       Async[F].delay(
         system.ask(ref => store.Retrieve(ref, messageId.show)).transformWith {
           case Success(records) if records.isEmpty =>
-            Future.failed(new IllegalArgumentException(s"Message with id ${messageId.show} cannot be found"))
+            Future.failed(
+              new MissingResourceException(
+                s"Message with id ${messageId.show} cannot be found",
+                "Message",
+                messageId.show
+              )
+            )
           case Success(records) =>
             Future.successful(records.head)
           case Failure(e) =>
