@@ -4,6 +4,7 @@ import mailinator.db.read._
 import mailinator.model.write.WriteServiceMock
 import mailinator.http.read.ReadHttp
 import mailinator.http.write.WriteHttp
+import mailinator.config.Settings
 
 import cats.syntax.all._
 import cats.effect._
@@ -25,11 +26,16 @@ object Main extends IOApp {
       messageView: MessageView[IO],
       messageIndexView: MessageIndexView[IO]
   ): IO[Unit] = {
+    val settings = Settings(
+      host = ipv4"0.0.0.0",
+      port = port"8080",
+      maxPageSize = 5
+    )
     val writeService = new WriteServiceMock[IO](messageView, messageIndexView)
-    val readHttp = new ReadHttp(messageView, messageIndexView)
+    val readHttp = new ReadHttp(messageView, messageIndexView, settings)
     val writeHttp = new WriteHttp(writeService)
     for {
-      _ <- new http.Server(readHttp, writeHttp).instance(ipv4"0.0.0.0", port"8080").use(_ => IO.never)
+      _ <- new http.Server(readHttp, writeHttp, settings).make().use(_ => IO.never)
     } yield ()
   }
 

@@ -4,6 +4,7 @@ import mailinator.data.shared.validation.validateEmailAddress
 import mailinator.data.shared.MessageId
 import mailinator.data.read._
 import mailinator.db.read.{MessageIndexView, MessageView}
+import mailinator.config.Settings
 
 import cats.syntax.all._
 import cats.effect._
@@ -15,14 +16,15 @@ import org.http4s._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.circe._
 
-class ReadHttp[F[_]: Async](messageView: MessageView[F], messageIndexView: MessageIndexView[F]) extends Http4sDsl[F] {
-  val routes = readMessageIndexRoute <+> readMessageRoute
+class ReadHttp[F[_]: Async](messageView: MessageView[F], messageIndexView: MessageIndexView[F], settings: Settings)
+    extends Http4sDsl[F] {
+  val routes = messageIndexRoute <+> messageRoute
 
   object FromTimestampParam extends OptionalQueryParamDecoderMatcher[Long]("timestamp")
   object FromIdParam extends OptionalQueryParamDecoderMatcher[String]("id")
 
   // GET /mailboxes/{email address}/messages
-  def readMessageIndexRoute =
+  def messageIndexRoute =
     HttpRoutes.of[F] {
       case GET -> Root / "mailboxes" / address / "messages" :?
           FromTimestampParam(maybeFromTimestamp) +& FromIdParam(maybeFromId) =>
@@ -32,7 +34,7 @@ class ReadHttp[F[_]: Async](messageView: MessageView[F], messageIndexView: Messa
           page <- messageIndexView.retrieveMessages(
             address,
             maybeFromTimestamp.flatMap(ft => fromId.map((ft, _))),
-            Page.defaultSize
+            settings.maxPageSize
           )
           response <- ReadMessageIndexResponse.from(page)
           status <- Ok(response.asJson)
@@ -41,7 +43,7 @@ class ReadHttp[F[_]: Async](messageView: MessageView[F], messageIndexView: Messa
     }
 
   // GET /mailboxes/{email address}/messages/{message id}
-  def readMessageRoute =
+  def messageRoute =
     HttpRoutes.of[F] { case GET -> Root / "mailboxes" / address / "messages" / id =>
       val result = for {
         // we validate the email address but it isn't actually used later as the message id is the unique key

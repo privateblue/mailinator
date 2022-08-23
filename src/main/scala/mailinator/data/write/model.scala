@@ -95,6 +95,25 @@ object DeleteMailboxCommand {
     } yield DeleteMailboxCommand(address = addressValidated, receivedAt = timestamp, requestId = requestId)
 }
 
+case class MailboxDeletedEvent(
+    address: String,
+    requestId: RequestId,
+    mailboxDeletedAt: Long,
+    deletedMessageCount: Int
+)
+
+object MailboxDeletedEvent {
+  def from[F[_]: Monad](command: DeleteMailboxCommand, deletedAt: Long, messageCount: Int): F[MailboxDeletedEvent] =
+    Monad[F].pure(
+      MailboxDeletedEvent(
+        address = command.address,
+        requestId = command.requestId,
+        mailboxDeletedAt = deletedAt,
+        deletedMessageCount = messageCount
+      )
+    )
+}
+
 case class DeleteMessageCommand(
     messageId: MessageId,
     receivedAt: Long,

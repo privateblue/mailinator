@@ -1,6 +1,6 @@
 package mailinator.db.read
 
-import mailinator.data.shared.{MessageId, MessageViewRecord}
+import mailinator.data.shared.MessageId
 
 import store.StoreActor
 
@@ -11,6 +11,7 @@ import cats.effect.kernel.Resource
 import akka.actor.typed.scaladsl.AskPattern._
 import akka.actor.typed.ActorSystem
 import akka.util.Timeout
+import mailinator.data.read.MessageViewRecord
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -90,7 +91,26 @@ class StoreActorMessageView[F[_]: Async] extends MessageView[F] {
     )
   }
 
-  override def removeMailbox(address: String): F[Seq[MessageViewRecord]] = ???
+  override def removeMailbox(address: String): F[Seq[MessageViewRecord]] =
+    Async[F].fromFuture(
+      Async[F].delay(
+        for {
+          records <- system.ask(ref => store.RetrieveRange(ref, address, Option.empty, Option.empty))
+          deleted <- records
+            .map(r => system.ask(ref => store.Remove(ref, r.messageId)))
+            .sequence
+            .map(_.flatten)
+            .transformWith {
+              case Success(rs) if rs.isEmpty =>
+                Future.failed(new IllegalArgumentException(s"Mailbox $address cannot be found"))
+              case Success(rs) =>
+                Future.successful(rs)
+              case Failure(e) =>
+                Future.failed(e)
+            }
+        } yield deleted
+      )
+    )
 
   override def removeMessage(messageId: MessageId): F[MessageViewRecord] =
     Async[F].fromFuture(

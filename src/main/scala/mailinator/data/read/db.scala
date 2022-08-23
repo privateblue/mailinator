@@ -1,4 +1,4 @@
-package mailinator.data.shared
+package mailinator.data.read
 
 case class MessageIndexViewRecord(
     messageId: String,

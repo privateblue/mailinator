@@ -9,7 +9,7 @@ import cats.effect._
 trait WriteService[F[_]] {
   def createMailbox(command: CreateMailboxCommand): F[Unit]
   def createMessage(command: CreateMessageCommand): F[MessageCreatedEvent]
-  def deleteMailbox(command: DeleteMailboxCommand): F[Unit]
+  def deleteMailbox(command: DeleteMailboxCommand): F[MailboxDeletedEvent]
   def deleteMessage(command: DeleteMessageCommand): F[MessageDeletedEvent]
 }
 
@@ -42,8 +42,13 @@ class WriteServiceMock[F[_]: Async](messageView: MessageView[F], messageIndexVie
       event <- MessageCreatedEvent.from(command, createdAt.toEpochMilli)
     } yield event
 
-  override def deleteMailbox(command: DeleteMailboxCommand): F[Unit] =
-    Async[F].unit
+  override def deleteMailbox(command: DeleteMailboxCommand): F[MailboxDeletedEvent] =
+    for {
+      messageRecords <- messageView.removeMailbox(command.address)
+      messageIndexRecords <- messageIndexView.removeMailbox(command.address)
+      deletedAt <- Async[F].realTimeInstant
+      event <- MailboxDeletedEvent.from(command, deletedAt.toEpochMilli, messageRecords.size)
+    } yield event
 
   override def deleteMessage(command: DeleteMessageCommand): F[MessageDeletedEvent] =
     for {

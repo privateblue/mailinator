@@ -39,6 +39,23 @@ object CreateMessageResponse {
     )
 }
 
+case class DeleteMailboxResponse(
+    address: String,
+    deletedAt: Long,
+    messageCount: Int
+)
+
+object DeleteMailboxResponse {
+  def from[F[_]: Monad](event: MailboxDeletedEvent): F[DeleteMailboxResponse] =
+    Monad[F].pure(
+      DeleteMailboxResponse(
+        address = event.address,
+        deletedAt = event.mailboxDeletedAt,
+        messageCount = event.deletedMessageCount
+      )
+    )
+}
+
 case class DeleteMessageResponse(
     messageId: MessageId,
     receivedAt: Long,

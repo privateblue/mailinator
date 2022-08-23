@@ -1,12 +1,14 @@
 package store
 
-import mailinator.data.shared._
+import mailinator.data.read.MessageIndexViewRecord
 
 import org.scalatest.flatspec._
 
 import akka.actor.typed.scaladsl.AskPattern._
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.actor.typed.ActorRef
+
+import java.util.UUID
 
 class StoreSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike {
   implicit val ec = system.executionContext
@@ -23,13 +25,6 @@ class StoreSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike {
     override implicit val sortKeyOrdering = Ordering.Long.reverse
     override implicit val filterKeyOrdering = Ordering.String
   }
-
-  // e, 3, recipient1
-  // c, 2, recipient1
-  // a, 1, recipient1
-  // d, 3, recipient2
-  // f, 3, recipient2
-  // b, 2, recipient2
 
   val recordA = MessageIndexViewRecord(
     messageId = "a",
@@ -79,7 +74,7 @@ class StoreSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike {
     subject = "test record 6"
   )
 
-  def insert(store: ActorRef[index.Protocol]) =
+  def insertRecords(store: ActorRef[index.Protocol]) =
     for {
       _ <- store.ask(ref => index.Append(ref, recordA))
       _ <- store.ask(ref => index.Append(ref, recordB))
@@ -89,15 +84,91 @@ class StoreSpec extends ScalaTestWithActorTestKit with AnyFlatSpecLike {
       _ <- store.ask(ref => index.Append(ref, recordF))
     } yield ()
 
-  "RetrieveRange" should "respect the filter and return a cursored page sorted correctly" in {
-    val store = spawn(index())
+  // the sorted map looks like:
+  // e, 3, recipient1
+  // c, 2, recipient1
+  // a, 1, recipient1
+  // d, 3, recipient2
+  // f, 3, recipient2
+  // b, 2, recipient2
+
+  "RetrieveRange" should "first address, own cursor, limit after end of own records" in {
+    val store = spawn(index(), UUID.randomUUID().toString)
     val result = for {
-      _ <- insert(store)
+      _ <- insertRecords(store)
       cursor = Option((recordC.receivedAt, recordC.messageId))
-      range1 <- store.ask(ref => index.RetrieveRange(ref, "recipient1", cursor, 3))
-      range2 <- store.ask(ref => index.RetrieveRange(ref, "recipient2", cursor, 3))
-    } yield (range1, range2)
-    result.futureValue._1 should contain theSameElementsInOrderAs Seq(recordC, recordA)
-    result.futureValue._2 should contain theSameElementsInOrderAs Seq()
+      range <- store.ask(ref => index.RetrieveRange(ref, "recipient1", cursor, Option(3)))
+    } yield range
+    result.futureValue should contain theSameElementsInOrderAs Seq(recordC, recordA)
+  }
+
+  "RetrieveRange" should "second address, but other recipient's cursor" in {
+    val store = spawn(index(), UUID.randomUUID().toString)
+    val result = for {
+      _ <- insertRecords(store)
+      cursor = Option((recordC.receivedAt, recordC.messageId))
+      range <- store.ask(ref => index.RetrieveRange(ref, "recipient2", cursor, Option(3)))
+    } yield range
+    result.futureValue should contain theSameElementsInOrderAs Seq()
+  }
+
+  "RetrieveRange" should "second address, own cursor, limit at end of own records" in {
+    val store = spawn(index(), UUID.randomUUID().toString)
+    val result = for {
+      _ <- insertRecords(store)
+      cursor = Option((recordD.receivedAt, recordD.messageId))
+      range <- store.ask(ref => index.RetrieveRange(ref, "recipient2", cursor, Option(3)))
+    } yield range
+    result.futureValue should contain theSameElementsInOrderAs Seq(recordD, recordF, recordB)
+  }
+
+  "RetrieveRange" should "first address, but other recipient's cursor" in {
+    val store = spawn(index(), UUID.randomUUID().toString)
+    val result = for {
+      _ <- insertRecords(store)
+      cursor = Option((recordD.receivedAt, recordD.messageId))
+      range <- store.ask(ref => index.RetrieveRange(ref, "recipient1", cursor, Option(2)))
+    } yield range
+    result.futureValue should contain theSameElementsInOrderAs Seq()
+  }
+
+  "RetrieveRange" should "first address, no cursor, limit before the end of own records" in {
+    val store = spawn(index(), UUID.randomUUID().toString)
+    val result = for {
+      _ <- insertRecords(store)
+      cursor = Option.empty
+      range <- store.ask(ref => index.RetrieveRange(ref, "recipient1", cursor, Option(3)))
+    } yield range
+    result.futureValue should contain theSameElementsInOrderAs Seq(recordE, recordC, recordA)
+  }
+
+  "RetrieveRange" should "first address, no cursor, limit after the end of own records" in {
+    val store = spawn(index(), UUID.randomUUID().toString)
+    val result = for {
+      _ <- insertRecords(store)
+      cursor = Option.empty
+      range <- store.ask(ref => index.RetrieveRange(ref, "recipient1", cursor, Option(4)))
+    } yield range
+    result.futureValue should contain theSameElementsInOrderAs Seq(recordE, recordC, recordA)
+  }
+
+  "RetrieveRange" should "second address, no cursor, limit before the end of own records" in {
+    val store = spawn(index(), UUID.randomUUID().toString)
+    val result = for {
+      _ <- insertRecords(store)
+      cursor = Option.empty
+      range <- store.ask(ref => index.RetrieveRange(ref, "recipient2", cursor, Option(3)))
+    } yield range
+    result.futureValue should contain theSameElementsInOrderAs Seq(recordD, recordF, recordB)
+  }
+
+  "RetrieveRange" should "second address, no cursor, no limit" in {
+    val store = spawn(index(), UUID.randomUUID().toString)
+    val result = for {
+      _ <- insertRecords(store)
+      cursor = Option.empty
+      range <- store.ask(ref => index.RetrieveRange(ref, "recipient2", cursor, Option.empty))
+    } yield range
+    result.futureValue should contain theSameElementsInOrderAs Seq(recordD, recordF, recordB)
   }
 }

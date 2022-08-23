@@ -1,7 +1,7 @@
 package mailinator.db.read
 
-import mailinator.data.read.Page
-import mailinator.data.shared.{MessageId, MessageIndexViewRecord}
+import mailinator.data.read.{MessageIndexViewRecord, Page}
+import mailinator.data.shared.MessageId
 
 import store.StoreActor
 
@@ -92,7 +92,26 @@ class StoreActorMessageIndexView[F[_]: Async] extends MessageIndexView[F] {
     )
   }
 
-  override def removeMailbox(address: String): F[Seq[MessageIndexViewRecord]] = ???
+  override def removeMailbox(address: String): F[Seq[MessageIndexViewRecord]] =
+    Async[F].fromFuture(
+      Async[F].delay(
+        for {
+          records <- system.ask(ref => store.RetrieveRange(ref, address, Option.empty, Option.empty))
+          deleted <- records
+            .map(r => system.ask(ref => store.Remove(ref, r.messageId)))
+            .sequence
+            .map(_.flatten)
+            .transformWith {
+              case Success(rs) if rs.isEmpty =>
+                Future.failed(new IllegalArgumentException(s"Mailbox $address cannot be found"))
+              case Success(rs) =>
+                Future.successful(rs)
+              case Failure(e) =>
+                Future.failed(e)
+            }
+        } yield deleted
+      )
+    )
 
   override def removeMessage(messageId: MessageId): F[MessageIndexViewRecord] =
     Async[F].fromFuture(
@@ -115,7 +134,7 @@ class StoreActorMessageIndexView[F[_]: Async] extends MessageIndexView[F] {
   ): F[Page[MessageIndexViewRecord, (Long, String)]] =
     Async[F].fromFuture(
       Async[F].delay(
-        system.ask(ref => store.RetrieveRange(ref, address, from.map(f => (f._1, f._2.show)), limit + 1)).map {
+        system.ask(ref => store.RetrieveRange(ref, address, from.map(f => (f._1, f._2.show)), Option(limit + 1))).map {
           records =>
             if (records.size >= limit + 1) {
               val next = records.last

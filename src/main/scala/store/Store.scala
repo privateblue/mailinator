@@ -34,16 +34,23 @@ case class Store[PK, V, SK, FK](
   def retrieve(key: PK): Seq[V] =
     map.get(key).toSeq
 
-  def retrieveRange(filter: FK, from: Option[(SK, PK)], limit: Int): Seq[V] = {
-    val firstKey = sort.firstKey
-    val (fromSK, fromPK) = from.getOrElse((firstKey._2, firstKey._3))
-    sort
-      .iteratorFrom((filter, fromSK, fromPK))
-      .takeWhile(_._1._1 == filter)
-      .map(_._2)
-      .take(limit)
-      .toSeq
-  }
+  def retrieveRange(filter: FK, from: Option[(SK, PK)], limit: Option[Int]): Seq[V] =
+    sort.keys
+      .find(_._1 == filter)
+      .flatMap { firstKey =>
+        val (fromSK, fromPK) = from.getOrElse((firstKey._2, firstKey._3))
+        val key = (filter, fromSK, fromPK)
+        sort
+          .get(key)
+          .map { _ =>
+            val results = sort
+              .iteratorFrom(key)
+              .takeWhile(_._1._1 == filter)
+              .map(_._2)
+            limit.map(results.take).getOrElse(results).toSeq
+          }
+      }
+      .getOrElse(Seq.empty)
 
   def remove(key: PK): (Seq[V], Store[PK, V, SK, FK]) = {
     map
@@ -79,7 +86,7 @@ trait StoreActor {
   sealed trait Protocol
   case class Append(replyTo: ActorRef[Seq[Value]], value: Value) extends Protocol
   case class Retrieve(replyTo: ActorRef[Seq[Value]], key: PK) extends Protocol
-  case class RetrieveRange(replyTo: ActorRef[Seq[Value]], filter: FK, from: Option[(SK, PK)], limit: Int)
+  case class RetrieveRange(replyTo: ActorRef[Seq[Value]], filter: FK, from: Option[(SK, PK)], limit: Option[Int])
       extends Protocol
   case class Remove(replyTo: ActorRef[Seq[Value]], key: PK) extends Protocol
 

@@ -16,13 +16,13 @@ import org.http4s.circe._
 
 class WriteHttp[F[_]: Async](writeService: WriteService[F]) extends Http4sDsl[F] {
   val routes =
-    writeCreateMailboxRoute <+> writeCreateMessageRoute <+> writeDeleteMailboxRoute <+> writeDeleteMessageRoute
+    createMailboxRoute <+> createMessageRoute <+> deleteMailboxRoute <+> deleteMessageRoute
 
   implicit val createMailboxRequestDecoder = jsonOf[F, CreateMailboxRequest]
   implicit val createMessageRequestDecoder = jsonOf[F, CreateMessageRequest]
 
   // POST /mailboxes
-  def writeCreateMailboxRoute =
+  def createMailboxRoute =
     HttpRoutes.of[F] { case req @ POST -> Root / "mailboxes" =>
       val result = for {
         request <- req.as[CreateMailboxRequest]
@@ -36,7 +36,7 @@ class WriteHttp[F[_]: Async](writeService: WriteService[F]) extends Http4sDsl[F]
     }
 
   // POST /mailboxes/{email address}/messages
-  def writeCreateMessageRoute =
+  def createMessageRoute =
     HttpRoutes.of[F] { case req @ POST -> Root / "mailboxes" / address / "messages" =>
       val result = for {
         request <- req.as[CreateMessageRequest]
@@ -52,20 +52,21 @@ class WriteHttp[F[_]: Async](writeService: WriteService[F]) extends Http4sDsl[F]
     }
 
   // DELETE /mailboxes/{email address}
-  def writeDeleteMailboxRoute =
+  def deleteMailboxRoute =
     HttpRoutes.of[F] { case DELETE -> Root / "mailboxes" / address =>
       val result = for {
         now <- Async[F].realTimeInstant
         requestId <- RequestId.generated[F]
         command <- DeleteMailboxCommand.from(address, now.toEpochMilli, requestId)
-        _ <- writeService.deleteMailbox(command)
-        status <- Ok()
+        event <- writeService.deleteMailbox(command)
+        response <- DeleteMailboxResponse.from(event)
+        status <- Ok(response.asJson)
       } yield status
       result.handleErrorWith(errorHandler)
     }
 
   // DELETE /mailboxes/{email address}/messages/{message id}
-  def writeDeleteMessageRoute =
+  def deleteMessageRoute =
     HttpRoutes.of[F] { case DELETE -> Root / "mailboxes" / address / "messages" / id =>
       val result = for {
         messageId <- MessageId.from(id)
