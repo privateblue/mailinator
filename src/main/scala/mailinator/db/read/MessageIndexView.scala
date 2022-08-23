@@ -1,14 +1,17 @@
 package mailinator.db.read
 
+import mailinator.data.read.Page
+import mailinator.data.shared.{MessageId, MessageIndexViewRecord}
+
+import store.StoreActor
+
+import cats.syntax.all._
+import cats.effect.Async
+import cats.effect.kernel.Resource
+
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.AskPattern._
 import akka.util.Timeout
-import cats.effect.Async
-import cats.effect.kernel.Resource
-import cats.syntax.all._
-import mailinator.data.read.Page
-import mailinator.data.shared.{MessageId, MessageIndexViewRecord}
-import store.StoreActor
 
 import scala.concurrent.duration._
 import scala.concurrent.Future
@@ -25,7 +28,7 @@ trait MessageIndexView[F[_]] {
 
   def removeMailbox(address: String): F[Seq[MessageIndexViewRecord]]
 
-  def removeMessage(address: String, messageId: MessageId): F[MessageIndexViewRecord]
+  def removeMessage(messageId: MessageId): F[MessageIndexViewRecord]
 
   def retrieveMessages(
       address: String,
@@ -91,24 +94,14 @@ class StoreActorMessageIndexView[F[_]: Async] extends MessageIndexView[F] {
 
   override def removeMailbox(address: String): F[Seq[MessageIndexViewRecord]] = ???
 
-  override def removeMessage(address: String, messageId: MessageId): F[MessageIndexViewRecord] =
+  override def removeMessage(messageId: MessageId): F[MessageIndexViewRecord] =
     Async[F].fromFuture(
       Async[F].delay(
         system.ask(ref => store.Remove(ref, messageId.show)).transformWith {
           case Success(records) if records.isEmpty =>
             Future.failed(new IllegalArgumentException(s"Message with id ${messageId.show} cannot be found"))
-          // this below is a weird case to check, but the alternative is to check the consistency between the
-          // requested address and messageId upfront, which means an extra  db query for every query. while
-          // this way we only need extra inserts for edge cases
-          case Success(records) if !records.exists(_.recipient == address) =>
-            records
-              .map(r => system.ask(ref => store.Append(ref, r))) // add deleted records back
-              .sequence_
-              .flatMap(_ =>
-                Future.failed(new IllegalArgumentException(s"Message with id ${messageId.show} cannot be found"))
-              )
           case Success(records) =>
-            Future.successful(records.find(_.recipient == address).get) // we know it exists, so we can .get here
+            Future.successful(records.head)
           case Failure(e) =>
             Future.failed(e)
         }

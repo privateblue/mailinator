@@ -1,8 +1,8 @@
 package mailinator.data.write
 
-import cats._
-import cats.syntax.all._
 import mailinator.data.shared.MessageId
+
+import cats._
 
 case class CreateMailboxRequest(
     address: String

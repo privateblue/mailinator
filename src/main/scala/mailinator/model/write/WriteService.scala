@@ -47,8 +47,9 @@ class WriteServiceMock[F[_]: Async](messageView: MessageView[F], messageIndexVie
 
   override def deleteMessage(command: DeleteMessageCommand): F[MessageDeletedEvent] =
     for {
-      deleted <- messageView.removeMessage(command.address, command.messageId)
-      _ <- messageIndexView.removeMessage(command.address, command.messageId)
+      // the address in the command is ignored as the message id is a unique key
+      deleted <- messageView.removeMessage(command.messageId)
+      _ <- messageIndexView.removeMessage(command.messageId)
       deletedAt <- Async[F].realTimeInstant
       event <- MessageDeletedEvent.from(
         command,

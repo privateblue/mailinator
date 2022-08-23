@@ -1,12 +1,14 @@
 package mailinator
 
+import mailinator.db.read._
 import mailinator.model.write.WriteServiceMock
 import mailinator.http.read.ReadHttp
 import mailinator.http.write.WriteHttp
+
 import cats.syntax.all._
 import cats.effect._
+
 import com.comcast.ip4s._
-import mailinator.db.read.{MessageIndexView, MessageView, StoreActorMessageIndexView, StoreActorMessageView}
 
 object Main extends IOApp {
   def run(args: List[String]): IO[ExitCode] = {

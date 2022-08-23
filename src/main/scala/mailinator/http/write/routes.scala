@@ -30,7 +30,7 @@ class WriteHttp[F[_]: Async](writeService: WriteService[F]) extends Http4sDsl[F]
         requestId <- RequestId.generated[F]
         command <- CreateMailboxCommand.from(request, now.toEpochMilli, requestId)
         _ <- writeService.createMailbox(command)
-        status <- Ok()
+        status <- NoContent()
       } yield status
       result.handleErrorWith(errorHandler)
     }
@@ -46,7 +46,7 @@ class WriteHttp[F[_]: Async](writeService: WriteService[F]) extends Http4sDsl[F]
         command <- CreateMessageCommand.from(request, address, messageId, now.toEpochMilli, requestId)
         event <- writeService.createMessage(command)
         response <- CreateMessageResponse.from(event)
-        status <- Ok(response.asJson)
+        status <- Created(response.asJson)
       } yield status
       result.handleErrorWith(errorHandler)
     }

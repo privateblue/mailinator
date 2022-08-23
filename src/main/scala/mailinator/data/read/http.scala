@@ -1,6 +1,7 @@
 package mailinator.data.read
 
-import mailinator.data.shared.{MessageId, MessageIndexViewRecord, MessageViewRecord}
+import mailinator.data.shared._
+
 import cats.syntax.all._
 import cats.effect.Async
 

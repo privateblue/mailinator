@@ -1,7 +1,9 @@
 package store
 
 import mailinator.data.shared._
+
 import org.scalatest.flatspec._
+
 import akka.actor.typed.scaladsl.AskPattern._
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
 import akka.actor.typed.ActorRef

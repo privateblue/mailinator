@@ -44,9 +44,10 @@ class ReadHttp[F[_]: Async](messageView: MessageView[F], messageIndexView: Messa
   def readMessageRoute =
     HttpRoutes.of[F] { case GET -> Root / "mailboxes" / address / "messages" / id =>
       val result = for {
+        // we validate the email address but it isn't actually used later as the message id is the unique key
         _ <- Async[F].fromValidated(validateEmailAddress(address))
         messageId <- MessageId.from(id)
-        record <- messageView.retrieveMessage(address, messageId)
+        record <- messageView.retrieveMessage(messageId)
         response <- ReadMessageResponse.from(record)
         status <- Ok(response.asJson)
       } yield status
