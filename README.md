@@ -93,3 +93,53 @@ The `messageCount` field is a count of all deleted messages.
 }
 ```
 The JSON is practically the deleted message.
+
+### Building and running the app
+
+Far the easiest way to build and run the application is to `sbt run` in the cloned directory.
+
+### Design considerations and potential extension directions
+
+###### Deviation from the specification
+I've deviated from the exercise spec in one way: there is no need to create a mailbox before sending messages to its address. The API endpoint to create a mailbox is practically a no-op, and at the same time, deleting the last message of an address removes the mailbox too. My reasoning for this deviation is that it just felt more logical, it is closer to how Mailinator actually worked, and also, it simplified the implemention.
+
+###### Extensibility over simplicity
+This solution might feel a bit boilerplate-y at first, and some of the code might be an overkill for such a simple application. What I wanted to demonstrate is how I would organize and modularize any API and its backend.
+
+I was very keen to keep the tiers of the application as separate as possible: the http layer, the service layer and the data storage aspect. These all have their own data models, so that there is no tight coupling between these layers and they can evolve separately, if needed. A lot of the code is just conversion between data classes of these layers, which might feel "bureaucratic", but this actually adds to the type safety, and makes refactorings (swapping out an exteranal lib, switching to a different design pattern, etc.) of one layer easier, as it localizes the interface between layers in a few places.
+
+I also tried to keep the read and write side of the application separate. There are separate components for read and write API endpoints, services, and databases. I didn't go as far as event sourcing, but I kept some CQRS principles in mind, and it wouldn't be hard to evolve this further to a fully fledged event sourced solution.
+
+###### Architecture, and scaling opportunities
+This latter consideration is important, because it is unsure if the system is read or write heavy, and it may be necessary to scale these aspects differently. If such a requirement would arise, it would be very easy to split the app, and move read and write components into separate microservices, and run them as separate processes. Obviously, it would require a new datastore implementation.
+
+The architecture I had in my mind, while working on this solution, was such that write requests arrive to a separate write http gateway, which basically just turns these API requests into commands. Ideally these commands would be immediately enqueued on some message queue solution, but I haven't gone that far with my implementation. It would be very easy though to refactor my solution to such a reactive one. 
+
+I've implemented two parallel "views" (database tables), that serve as queryable representations of aggregates, hence the name "view". On every write request the system updates these views. Ideally, the updaters of these views would be workers subscribed to queue topics, and would take commands from the queue, process the commands by updating the views, and enqueue events acknowledging changes and signalling success. In my implementation this isn't done in a reactive fashion, but a write service initiates write queries directly to a datastore.
+
+The two parallel views are completely redundant - it is just a demonstration of an ideal setup, in which there are eventually consistent views, updated asynchronously on writes, one per read query. For this particular solution one such view (a single database table) would happen to be sufficient, but this isn't the point.
+
+###### In-memory datastore
+I have implemented a naive in-memory datastore, that is based on Akka actors. The motivation here was that actors provide job queues and workers for free, and this makes dealing with concurrent reads and writes much simpler. I was nowhere near of implementing isolation levels, transactions etc., it is really the simplest, most naive implementation of a datastore, with only atomic operations.
+
+The store takes a single `capacity` parameter to bound its size and prevent memory errors, and it evicts the oldest message on every insert if over capacity.
+
+There's an endless numbers of possible improvements to this datastore implementation, but I'm not convinced it is actually worth it. 
+
+###### Missing bits
+- There are no configuration files or env vars the app reads, just a `Settings` class with a bunch of hardcoded values, that is passed around.
+
+- There is no logging at all, so the observability of the app is far from ideal.
+
+- In relation to logging, while I added a `RequestId` field to all commands and events, there is no request tracing implemented, although it would be fairly easy to add it.
+
+- The datastore and the API could use monitoring, at least of basic metrics, like RPM, size, memory and CPU utilization, etc.
+
+- Error-handling is very ad-hoc and rudimentary, and it would make the API much nicer if it had its own well-documented error codes.
+
+- Generation of the http protocol from a schema also comes to mind as a nice feature to have, and also versioning of the API in relation to that. 
+
+###### Automated tests
+I've added a few integration-like tests, that take advantage of the Http4s library's modularity. There could be many more such tests to check failure modes, validation, edge-cases etc. 
+
+There is a separate unit test class for the datastore, that mainly focuses on correct sorting and pagination, and also the naive eviction mechanism.
