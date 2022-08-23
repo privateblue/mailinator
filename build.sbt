@@ -1,4 +1,4 @@
-val scala3Version = "2.13.8"
+val scala2Version = "2.13.8"
 val logbackVersion = "1.2.11"
 val catsVersion = "2.8.0"
 val catsEffectVersion = "3.3.14"
@@ -13,7 +13,7 @@ lazy val root = project
   .settings(
     name := "mailinator",
     version := "0.1.0-SNAPSHOT",
-    scalaVersion := scala3Version,
+    scalaVersion := scala2Version,
     libraryDependencies ++= Seq(
       "ch.qos.logback" % "logback-classic" % logbackVersion,
       "org.typelevel" %% "cats-core" % catsVersion,
