@@ -11,7 +11,7 @@ This API consists of 6 endpoints:
 ```
 and it validates the `address` field to not let invalid email addresses through, but it does nothing, and returns `204`.
  
-- `POST /mailboxes/{email address}/messages`: Creates a new message. it takes a JSON body:
+- `POST /mailboxes/{email address}/messages`: Creates a new message. It takes a JSON body:
 ```
 {
   "sender":"{sender}",
@@ -101,7 +101,7 @@ Far the easiest way to build and run the application is to `sbt run` in the clon
 ### Design considerations and potential extension directions
 
 ###### Deviation from the specification
-I've deviated from the exercise spec in one way: there is no need to create a mailbox before sending messages to its address. The API endpoint to create a mailbox is practically a no-op, and at the same time, deleting the last message of an address removes the mailbox too. My reasoning for this deviation is that it just felt more logical, it is closer to how Mailinator actually worked, and also, it simplified the implemention.
+I've deviated from the exercise spec in one way: a mailbox does not have to be created before sending messages to its address. The API endpoint to create a mailbox is practically a no-op, and at the same time, deleting the last message of an address removes the mailbox too. My reasoning for this deviation is that it just feels slightly more logical, it is closer to how Mailinator actually worked, and also, it simplifies the implemention.
 
 ###### Extensibility over simplicity
 This solution might feel a bit boilerplate-y at first, and some of the code might be an overkill for such a simple application. What I wanted to demonstrate is how I would organize and modularize any API and its backend.
@@ -115,9 +115,9 @@ This latter consideration is important, because it is unsure if the system is re
 
 The architecture I had in my mind, while working on this solution, was such that write requests arrive to a separate write http gateway, which basically just turns these API requests into commands. Ideally these commands would be immediately enqueued on some message queue solution, but I haven't gone that far with my implementation. It would be very easy though to refactor my solution to such a reactive one. 
 
-I've implemented two parallel "views" (database tables), that serve as queryable representations of aggregates, hence the name "view". On every write request the system updates these views. Ideally, the updaters of these views would be workers subscribed to queue topics, and would take commands from the queue, process the commands by updating the views, and enqueue events acknowledging changes and signalling success. In my implementation this isn't done in a reactive fashion, but a write service initiates write queries directly to a datastore.
+I've implemented two parallel "views" (database tables), that serve as queryable representations of aggregates, one per corresponding user query - hence the name "view". The system updates these views upon every write request. Ideally, the updaters of these views would be workers somewhere, subscribed to queue topics, and would take commands from the queue, process the commands by updating the views, and enqueue events acknowledging changes and signalling success. In my implementation this isn't done in a reactive fashion, there are no queues and topics, just a simple write service, that initiates write queries directly to the datastore.
 
-The two parallel views are completely redundant - it is just a demonstration of an ideal setup, in which there are eventually consistent views, updated asynchronously on writes, one per read query. For this particular solution one such view (a single database table) would happen to be sufficient, but this isn't the point.
+The two parallel views are completely redundant - it is just a demonstration of an ideal setup, in which there are eventually consistent views, updated asynchronously on writes, one per user query. For this particular solution one such view (a single database table) would happen to be sufficient, but this wasn't the point.
 
 ###### In-memory datastore
 I have implemented a naive in-memory datastore, that is based on Akka actors. The motivation here was that actors provide job queues and workers for free, and this makes dealing with concurrent reads and writes much simpler. I was nowhere near of implementing isolation levels, transactions etc., it is really the simplest, most naive implementation of a datastore, with only atomic operations.
@@ -125,6 +125,8 @@ I have implemented a naive in-memory datastore, that is based on Akka actors. Th
 The store takes a single `capacity` parameter to bound its size and prevent memory errors, and it evicts the oldest message on every insert if over capacity.
 
 There's an endless numbers of possible improvements to this datastore implementation, but I'm not convinced it is actually worth it. 
+
+(There is also some fairly uggly weirdness around the instantiation of the datastore, that involves existential typing and such. This was a consequence of using parameterized Akka message types, which is not a particularly good idea. It works, but it's clunky.)
 
 ###### Missing bits
 - There are no configuration files or env vars the app reads, just a `Settings` class with a bunch of hardcoded values, that is passed around.
@@ -139,7 +141,9 @@ There's an endless numbers of possible improvements to this datastore implementa
 
 - Generation of the http protocol from a schema also comes to mind as a nice feature to have, and also versioning of the API in relation to that. 
 
-###### Automated tests
-I've added a few integration-like tests, that take advantage of the Http4s library's modularity. There could be many more such tests to check failure modes, validation, edge-cases etc. 
+- I didn't commit to any of the "dependency injection" patterns, so the componenets and modules of the app are wired together simply by passing dependencies in to constructors. It could be refactored into using Scala implicits, or Kleisli etc., but all these have trade-offs, and it was hard to judge at this point what the priorites are, so I rather kept this aspect as simple and basic as possible, so it is easy to change in any direction.
 
-There is a separate unit test class for the datastore, that mainly focuses on correct sorting and pagination, and also the naive eviction mechanism.
+###### Automated tests
+I've added a few integration-like tests, that take advantage of the Http4s library's modularity - see `mailinator.IntegrationSpec`. There could be many more such tests to check failure modes, validation, edge-cases etc. 
+
+There is a separate unit test class for the datastore (`store.StoreSpec`), that mainly focuses on correct sorting and pagination, and also the naive eviction mechanism.
