@@ -13,7 +13,7 @@ case class CreateMailboxCommand(
 )
 
 object CreateMailboxCommand {
-  def from[F[_]: Monad](req: CreateMailboxRequest, timestamp: Long, requestId: RequestId)(implicit
+  def from[F[_]](req: CreateMailboxRequest, timestamp: Long, requestId: RequestId)(implicit
       me: MonadError[F, Throwable]
   ): F[CreateMailboxCommand] =
     for {
@@ -32,7 +32,7 @@ case class CreateMessageCommand(
 )
 
 object CreateMessageCommand {
-  def from[F[_]: Monad](
+  def from[F[_]](
       req: CreateMessageRequest,
       address: String,
       messageId: MessageId,
@@ -87,7 +87,7 @@ case class DeleteMailboxCommand(
 )
 
 object DeleteMailboxCommand {
-  def from[F[_]: Monad](address: String, timestamp: Long, requestId: RequestId)(implicit
+  def from[F[_]](address: String, timestamp: Long, requestId: RequestId)(implicit
       me: MonadError[F, Throwable]
   ): F[DeleteMailboxCommand] =
     for {
@@ -122,7 +122,7 @@ case class DeleteMessageCommand(
 )
 
 object DeleteMessageCommand {
-  def from[F[_]: Monad](address: String, messageId: MessageId, timestamp: Long, requestId: RequestId)(implicit
+  def from[F[_]](address: String, messageId: MessageId, timestamp: Long, requestId: RequestId)(implicit
       me: MonadError[F, Throwable]
   ): F[DeleteMessageCommand] =
     for {
